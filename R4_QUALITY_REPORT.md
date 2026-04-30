@@ -335,6 +335,70 @@ config = URLRuleConfig(
 | 异常输入降级处理 | ✅ 完成 | 异常输入测试（13 个） |
 | 属性缺失安全处理 | ✅ 完成 | 属性缺失测试（3 个） |
 | 批量处理边界 | ✅ 完成 | 批量边界测试（2 个） |
-| 无新增告警 | ✅ 完成 | 所有测试全绿（48 个） |
+| 清理弃用告警 | ✅ 完成 | `datetime.utcnow()` 调用改为语义等价方式 |
+| 无新增告警 | ✅ 完成 | `-W error::DeprecationWarning` 验证（53 个测试全绿） |
 
-**最终测试结果**：48 个 URL 规则相关测试全部通过，无失败用例。
+**最终测试结果**：53 个相关测试全部通过（48 个 URL 规则 + 5 个 utils 时间戳），无失败用例，无弃用告警。
+
+---
+
+## 9. 弃用告警清理（后续补充）
+
+### 9.1 问题定位
+
+测试中发现 1 处直接调用已弃用的 `datetime.utcnow()`：
+
+| 文件 | 行号 | 问题 |
+|------|------|------|
+| `tests/test_utils.py` | 46 | 直接调用 `datetime.utcnow()` 触发弃用警告 |
+
+### 9.2 修复方案
+
+**原代码**（触发弃用警告）：
+```python
+deprecated_result = datetime.utcnow()
+
+assert utc_now_result.tzinfo == deprecated_result.tzinfo
+assert utc_now_result.tzinfo is None
+
+time_diff = (deprecated_result - utc_now_result).total_seconds()
+assert abs(time_diff) < 1.0
+```
+
+**修复后代码**（语义等价，无弃用警告）：
+```python
+# The recommended replacement for datetime.utcnow() is:
+#   datetime.now(UTC).replace(tzinfo=None)
+# This produces the same behavior: naive datetime with UTC value
+expected = datetime.now(UTC).replace(tzinfo=None)
+
+# Verify same behavior as datetime.utcnow():
+# 1. Both return naive datetime (tzinfo is None)
+assert utc_now_result.tzinfo is None
+assert expected.tzinfo is None
+assert utc_now_result.tzinfo == expected.tzinfo
+
+# 2. Both represent current UTC time (within 1 second)
+time_diff = (expected - utc_now_result).total_seconds()
+assert abs(time_diff) < 1.0
+```
+
+### 9.3 断言目标保持
+
+原有断言目标未放松：
+
+| 原断言 | 修复后 | 状态 |
+|--------|--------|------|
+| `tzinfo == deprecated_result.tzinfo` | `tzinfo == expected.tzinfo` | ✅ 保持 |
+| `tzinfo is None` | `tzinfo is None` | ✅ 保持 |
+| `abs(time_diff) < 1.0` | `abs(time_diff) < 1.0` | ✅ 保持 |
+
+### 9.4 验证结果
+
+使用 `-W error::DeprecationWarning` 参数验证：
+```
+pytest -W error::DeprecationWarning
+============================= 53 passed in 0.27s ==============================
+```
+
+**结论**：所有测试通过，无弃用告警。
