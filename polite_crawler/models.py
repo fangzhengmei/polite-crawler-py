@@ -6,6 +6,8 @@ from typing import Optional
 from sqlalchemy import DateTime, String, Text, Integer, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from polite_crawler.utils import utc_now
+
 
 class Base(DeclarativeBase):
     """Base class for all models."""
@@ -32,7 +34,7 @@ class CrawledURL(Base):
     max_retries: Mapped[int] = mapped_column(Integer, default=3)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, index=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     

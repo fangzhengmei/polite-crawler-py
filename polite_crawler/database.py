@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from polite_crawler.models import Base, CrawledURL
+from polite_crawler.utils import utc_now
 
 
 def url_hash(url: str) -> str:
@@ -124,7 +125,7 @@ class Database:
             record = result.scalar_one_or_none()
             if record:
                 record.status = "in_progress"
-                record.started_at = datetime.utcnow()
+                record.started_at = utc_now()
                 session.add(record)
         
         async with self.session() as session:
@@ -154,7 +155,7 @@ class Database:
                 record.content_type = content_type
                 record.content_length = content_length
                 record.content = content
-                record.completed_at = datetime.utcnow()
+                record.completed_at = utc_now()
                 session.add(record)
         
         async with self.session() as session:
@@ -183,7 +184,7 @@ class Database:
                 if record.retry_count > record.max_retries:
                     record.status = "failed"
                     record.is_success = False
-                    record.completed_at = datetime.utcnow()
+                    record.completed_at = utc_now()
                 else:
                     record.status = "pending"
                 session.add(record)

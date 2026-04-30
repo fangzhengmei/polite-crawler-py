@@ -189,3 +189,100 @@ class TestDatabase:
         assert stats["total"] == 3
         assert stats["success"] == 1
         assert stats["pending"] == 1
+
+
+class TestDatabaseTimestamps:
+    """Tests for timestamp semantic consistency.
+    
+    These tests verify that all timestamps use naive datetime (without timezone info)
+    while representing UTC time. This maintains backward compatibility with the
+    original datetime.utcnow() implementation behavior.
+    """
+
+    @pytest.mark.asyncio
+    async def test_created_at_is_naive_datetime(self, in_memory_db: Database) -> None:
+        """Test that created_at is a naive datetime (without timezone info)."""
+        url = "https://example.com"
+        result = await in_memory_db.add_url(url)
+        
+        assert result.created_at is not None
+        assert result.created_at.tzinfo is None
+
+    @pytest.mark.asyncio
+    async def test_started_at_is_naive_datetime(self, in_memory_db: Database) -> None:
+        """Test that started_at is a naive datetime (without timezone info)."""
+        url = "https://example.com"
+        await in_memory_db.add_url(url)
+        
+        result = await in_memory_db.mark_started(url)
+        
+        assert result is not None
+        assert result.started_at is not None
+        assert result.started_at.tzinfo is None
+
+    @pytest.mark.asyncio
+    async def test_completed_at_is_naive_datetime_on_success(self, in_memory_db: Database) -> None:
+        """Test that completed_at is a naive datetime on successful crawl."""
+        url = "https://example.com"
+        await in_memory_db.add_url(url)
+        
+        result = await in_memory_db.mark_completed(
+            url=url,
+            response_status=200,
+        )
+        
+        assert result is not None
+        assert result.completed_at is not None
+        assert result.completed_at.tzinfo is None
+
+    @pytest.mark.asyncio
+    async def test_completed_at_is_naive_datetime_on_failure(self, in_memory_db: Database) -> None:
+        """Test that completed_at is a naive datetime on failed crawl (no retries left)."""
+        url = "https://example.com"
+        await in_memory_db.add_url(url, max_retries=0)
+        
+        await in_memory_db.mark_failed(url, "Test error")
+        
+        record = await in_memory_db.get_url(url)
+        
+        assert record is not None
+        assert record.completed_at is not None
+        assert record.completed_at.tzinfo is None
+
+    @pytest.mark.asyncio
+    async def test_timestamps_are_utc_values(self, in_memory_db: Database) -> None:
+        """Test that timestamps approximately match current UTC time.
+        
+        This verifies that while timestamps are naive (no tzinfo), their values
+        represent UTC time, not local time.
+        """
+        from datetime import datetime, UTC
+        
+        url = "https://example.com"
+        result = await in_memory_db.add_url(url)
+        
+        current_utc = datetime.now(UTC).replace(tzinfo=None)
+        time_diff = (current_utc - result.created_at).total_seconds()
+        
+        assert abs(time_diff) < 5.0
+
+    @pytest.mark.asyncio
+    async def test_all_timestamp_fields_same_semantics(self, in_memory_db: Database) -> None:
+        """Test that all timestamp fields follow the same naive-UTC semantics."""
+        url = "https://example.com"
+        await in_memory_db.add_url(url)
+        
+        await in_memory_db.mark_started(url)
+        
+        record = await in_memory_db.get_url(url)
+        assert record is not None
+        assert record.created_at.tzinfo is None
+        assert record.started_at is not None
+        assert record.started_at.tzinfo is None
+        
+        await in_memory_db.mark_completed(url, 200)
+        
+        record = await in_memory_db.get_url(url)
+        assert record is not None
+        assert record.completed_at is not None
+        assert record.completed_at.tzinfo is None
