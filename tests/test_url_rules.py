@@ -433,7 +433,11 @@ class TestURLRuleEngineBatch:
         assert len(results) == 0
 
     def test_evaluate_batch_mixed(self) -> None:
-        """Test evaluating a batch with mixed scenarios."""
+        """Test evaluating a batch with mixed scenarios.
+        
+        Note: URLs are normalized, so 'https://new.com' becomes 'https://new.com/'.
+        This is intentional - equivalent URLs should be treated the same.
+        """
         engine = URLRuleEngine()
         
         urls = [
@@ -462,11 +466,14 @@ class TestURLRuleEngineBatch:
         
         assert len(results) == 3
         
-        scenarios = {r.url: r.scenario for r in results}
+        scenarios_by_original = {}
+        for r in results:
+            key = r.original_url if r.original_url else r.url
+            scenarios_by_original[key] = r.scenario
         
-        assert scenarios["https://new.com"] == URLScenario.NORMAL
-        assert scenarios["https://pending.com"] == URLScenario.DUPLICATE_DEPENDENCY
-        assert scenarios["https://completed.com"] == URLScenario.CIRCULAR_DEPENDENCY
+        assert scenarios_by_original["https://new.com"] == URLScenario.NORMAL
+        assert scenarios_by_original["https://pending.com"] == URLScenario.DUPLICATE_DEPENDENCY
+        assert scenarios_by_original["https://completed.com"] == URLScenario.CIRCULAR_DEPENDENCY
 
     def test_get_stats_summary(self) -> None:
         """Test generating stats summary from batch results."""
